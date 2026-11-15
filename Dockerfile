@@ -1,0 +1,58 @@
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ffmpeg \
+    curl \
+    ca-certificates \
+    python3-pip \
+    libicu-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install N_m3u8DL-RE binary (primary download engine)
+RUN ARCH=$(dpkg --print-architecture) && \
+    if [ "$ARCH" = "arm64" ] || [ "$ARCH" = "aarch64" ]; then \
+      URL="https://github.com/nilaoda/N_m3u8DL-RE/releases/download/v0.5.1-beta/N_m3u8DL-RE_v0.5.1-beta_linux-arm64_20251029.tar.gz"; \
+    else \
+      URL="https://github.com/nilaoda/N_m3u8DL-RE/releases/download/v0.5.1-beta/N_m3u8DL-RE_v0.5.1-beta_linux-x64_20251029.tar.gz"; \
+    fi && \
+    curl -L -o /tmp/N_m3u8DL-RE.tar.gz "$URL" && \
+    tar -xzf /tmp/N_m3u8DL-RE.tar.gz -C /usr/local/bin/ && \
+    rm /tmp/N_m3u8DL-RE.tar.gz && \
+    chmod +x /usr/local/bin/N_m3u8DL-RE
+
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for Docker layer caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the app
+COPY . .
+
+# Create data directory
+RUN mkdir -p /app/data
+
+# Prevent N_m3u8DL-RE .NET runtime and Spectre.Console crash in headless containers
+ENV TERM=xterm
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+ENV DOTNET_SYSTEM_CONSOLE_ALLOW_ANSI_COLOR_REDIRECTION=1
+ENV COMPlus_EnableDiagnostics=0
+ENV DOTNET_EnableDiagnostics=0
+
+# ── Low-RAM tuning ──
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV MALLOC_ARENA_MAX=2
+ENV DOTNET_GCHeapHardLimit=8000000
+ENV DOTNET_gcConcurrent=0
+ENV DOTNET_GCConserveMemory=7
+
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -sf http://localhost:${PORT:-8080}/health || exit 1
+
+CMD ["python", "main.py"]

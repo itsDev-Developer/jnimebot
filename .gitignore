@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+venv/
+.venv/
+data/
+animedekho_bot.session*
+.env
+animedekho_bot.session
+opencode.json

@@ -1,0 +1,38 @@
+services:
+  bot:
+    build: .
+    container_name: animedekho-bot
+    restart: unless-stopped
+    env_file: .env
+    mem_limit: 330m          # hard cap so the host never freezes
+    memswap_limit: 700m      # allows swap as a safety net
+    ports:
+      - "8080:8080"          # /health — used by the HEALTHCHECK below and any external monitor
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    volumes:
+      - bot-data:/app/data
+      - bot-tmp:/tmp/animedekho_dl
+    depends_on:
+      - vidstream-api
+    environment:
+      - VIDSTREAM_API_URL=http://vidstream-api:4030
+
+  vidstream-api:
+    build: ./vidstream-api
+    container_name: animedekho-vidstream
+    restart: unless-stopped
+    mem_limit: 100m
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=64
+    expose:
+      - "4030"
+
+# NOTE: no local MongoDB here on purpose (needs ~250 MB+). Use MongoDB Atlas free tier in MONGO_URI.
+volumes:
+  bot-data:
+  bot-tmp:
